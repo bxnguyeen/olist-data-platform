@@ -1,109 +1,253 @@
-# Olist Data Pipeline — Implementation Progress Report
+# Olist Data Platform
 
-## 1. Objective
+A three-layer data pipeline for the Olist Brazilian E-Commerce dataset, using MinIO, Python, PostgreSQL, and dbt Core.
 
-Build a three-layer data pipeline using dbt for data transformation:
+The current implementation processes **orders and customers**.
 
-**`01_raw` → `02_stg` → `03_data_warehouse`**
-
-The current implementation covers orders and customers from the Olist Brazilian E-Commerce dataset.
-
-## 2. Architecture
+## Architecture
 
 ```text
-Source CSV files
-    ↓ Manual upload
-MinIO object storage
-    ↓ Python streaming ingestion
+Local CSV files
+    │ upload_to_minio.py
+    ▼
+MinIO: olist-raw
+    │ load_raw.py
+    ▼
 PostgreSQL: 01_raw
-    ↓ dbt transformations
+    │ dbt
+    ▼
 PostgreSQL: 02_stg
-    ↓ dbt business models
+    │ dbt
+    ▼
 PostgreSQL: 03_data_warehouse
 ```
 
-| Component | Responsibility |
-|---|---|
-| MinIO | Stores the original CSV files |
-| Python | Reads files from MinIO, validates their structure and loads PostgreSQL |
-| PostgreSQL | Stores all three data layers and executes SQL |
-| dbt Core | Manages SQL transformations, model dependencies and data tests |
-| Docker Compose | Runs the project’s MinIO service |
-| VS Code / DBeaver | Support development and inspection |
+- **MinIO:** stores source CSV files.
+- **Python:** uploads files and streams CSV data into PostgreSQL.
+- **PostgreSQL:** stores the three data layers and executes SQL.
+- **dbt:** manages transformations, dependencies, and data tests.
+- **Docker Compose:** runs MinIO. PostgreSQL is configured separately.
 
-PostgreSQL runs separately through Postgres.app on macOS. Trino is not part of the current implementation.
+## Requirements
 
-## 3. Data Layers
+Developed and tested on macOS with Python 3.13 and PostgreSQL 18.
 
-### `01_raw` — Source-aligned data
+Required software:
 
-Tables: `orders`, `customers`.
+- Python with `venv`
+- Docker with Docker Compose
+- PostgreSQL
+- Git
+- A PostgreSQL client such as DBeaver or `psql`
 
-Both tables contain **99,441 rows**. Columns are stored as text to preserve source representations, including identifiers and postal-code prefixes. Original CSV files remain available in MinIO.
+Compatibility with other environments has not yet been verified.
 
-### `02_stg` — Standardized data
+## Setup
 
-Models: `stg_orders`, `stg_customers`.
+### 1. Prepare the Python environment
 
-Transformations include standardizing column names, converting order timestamps, trimming surrounding whitespace, normalizing customer location text and converting empty strings to NULL where specified.
+From the repository root:
 
-### `03_data_warehouse` — Business-oriented data
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
 
-**`fct_orders`: one row per order**
+### 2. Configure environment variables
 
-Contains order details, customer identifiers, delivery duration, late-delivery status and a missing-delivery-date flag.
+Copy `.env.example` to `.env` and replace the placeholder values.
 
-**`dim_customers`: one row per `customer_unique_id`**
+Set:
 
-Contains the customer identifier, first and latest order timestamps, and order count. Dates and counts cover all order statuses in the available dataset.
+- MinIO username and password
+- PostgreSQL host, port, database, username, and password
+- `SOURCE_DATA_DIR`, pointing to the directory containing the source CSV files
 
-This initial customer model includes aggregated order attributes. Customer location is not reduced to a single latest address, because location can differ between orders.
+Do not commit `.env` or real credentials.
 
-## 4. Ingestion and Execution
+### 3. Start MinIO
 
-The Python loader streams CSV data into PostgreSQL temporary tables without loading entire files into Python memory.
+```bash
+docker compose up -d minio
+docker compose ps
+```
 
-It validates column names and order, rejects empty datasets, and uses PostgreSQL COPY to parse and load CSV records. After both temporary tables are loaded, it replaces the raw data and compares raw row counts with temporary-table counts.
+Open the console at `http://localhost:9101` and sign in using the credentials in `.env`.
 
-Both raw-table replacements occur in one transaction. An ingestion failure before commit rolls back the changes. Repeated loads replace existing data instead of appending duplicate rows.
+Create a bucket named:
 
-The pipeline runs with:
+```text
+olist-raw
+```
+
+The upload script expects this bucket to exist. Python accesses the MinIO API at `http://localhost:9100`.
+
+### 4. Prepare PostgreSQL
+
+Start PostgreSQL and connect to an existing database, such as `postgres`.
+
+Create the project database if it does not already exist:
+
+```sql
+CREATE DATABASE olist_database;
+```
+
+Connect to `olist_database` and execute:
+
+```text
+sql/00_create_raw_tables.sql
+```
+
+The configured PostgreSQL user must have permission to create schemas and tables, load data, and execute the dbt models.
+
+### 5. Configure dbt
+
+Copy the profile block from `profiles.example.yml` into:
+
+```text
+~/.dbt/profiles.yml
+```
+
+Replace the sample connection values. If the file already contains other profiles, preserve them and add the project profile.
+
+The top-level profile name must match the `profile` setting in `olist_warehouse/dbt_project.yml`.
+
+Python reads `.env`; dbt reads `profiles.yml`. Keep their PostgreSQL connection settings consistent.
+
+Verify the connection:
+
+```bash
+cd olist_warehouse
+dbt debug
+cd ..
+```
+
+### 6. Obtain the source data
+
+Download the [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce), following the source’s access requirements and license terms.
+
+Place these files in `SOURCE_DATA_DIR`:
+
+```text
+olist_orders_dataset.csv
+olist_customers_dataset.csv
+```
+
+Source datasets and credentials are not included in this repository.
+
+### 7. Upload and check the files
+
+From the repository root, with the virtual environment active:
+
+```bash
+python scripts/upload_to_minio.py
+python scripts/check_minio.py
+python scripts/check_postgres.py
+```
+
+Uploading uses the same object names in MinIO and updates their contents. The two uploads are not a shared transaction.
+
+`check_postgres.py` reports the raw orders count. A newly initialized database has zero rows until the first load.
+
+## Run the Pipeline
+
+Ensure MinIO and PostgreSQL are running, then execute from the repository root:
 
 ```bash
 python scripts/run_pipeline.py
 ```
 
-The runner loads raw data first, then invokes dbt. If ingestion fails, dbt is not started.
+The runner:
 
-## 5. Validation Results
+1. Loads both CSV files from MinIO into raw tables.
+2. Builds the selected dbt models and runs their tests.
+3. Stops before dbt if raw ingestion fails.
 
-Based on the completed runs:
+Upload is a separate step. Run `upload_to_minio.py` when preparing or replacing source files.
 
-- Raw orders and customers each contain **99,441 rows**.
-- The customer dimension contains **96,096 distinct customers**.
-- Customer order counts sum to **99,441 orders**.
-- Configured key, relationship and row-count tests passed.
-- **8 delivered orders lack an actual delivery timestamp** and generate a warning.
-- A deliberate failure after raw-table truncation was tested; both raw tables retained their previous row counts after rollback.
+To run the steps separately:
 
-## 6. Business Rules and Limitations
+```bash
+python scripts/load_raw.py
+```
 
-Late delivery is evaluated only for orders marked `delivered` with both actual and estimated delivery dates available. Comparison uses calendar dates, so delivery on the promised date is considered on time. Orders that cannot be evaluated retain NULL rather than being classified as on time.
+```bash
+cd olist_warehouse
+dbt build --select +fct_orders +dim_customers
+```
 
-The implementation currently uses full refresh ingestion. File upload to MinIO and pipeline invocation remain manual; scheduled execution is not configured.
+## Data Models
 
-Raw ingestion and dbt execution are not one shared transaction. If ingestion commits and dbt subsequently fails, the refreshed raw data remains.
+| Layer | Model or table | Row grain |
+|---|---|---|
+| `01_raw` | `orders` | One source order record |
+| `01_raw` | `customers` | One source customer record identified by `customer_id` |
+| `02_stg` | `stg_orders` | One standardized order |
+| `02_stg` | `stg_customers` | One standardized `customer_id` record |
+| `03_data_warehouse` | `fct_orders` | One order |
+| `03_data_warehouse` | `dim_customers` | One `customer_unique_id` |
 
-Streaming has been verified with the current dataset, not benchmarked on files of tens of gigabytes. Temporary tables require additional PostgreSQL storage. Row-count reconciliation does not independently prove that the source files are complete or that every value is correct.
+In Olist, `customer_id` links a customer record to an order. `customer_unique_id` identifies the same customer across multiple orders.
 
-## 7. Role of dbt
+The customer dimension includes first/latest order timestamps and order count, calculated across all order statuses. These are aggregated attributes in the initial implementation.
 
-dbt organizes SQL into reusable models, resolves dependencies through `source()` and `ref()`, and executes configured data tests. PostgreSQL performs the computation and stores the results.
+Customer location is not reduced to a single latest location, because it can differ between orders.
 
-This demonstrates dbt’s value over separately maintained manual SQL scripts: repeatable execution, explicit dependencies and automated validation. Python remains responsible for ingestion.
+## Ingestion Behavior
 
-## 8. Current Status
+The loader:
 
-A working pipeline for orders and customers has been implemented and rerun successfully, including streaming ingestion, transformation, data testing and a rollback exercise.
+- Validates CSV column names and order.
+- Streams CSV data into temporary PostgreSQL tables.
+- Rejects datasets without data rows.
+- Refreshes both raw tables in one transaction.
+- Compares raw row counts against temporary-table counts.
 
-Potential next steps include broader data-quality coverage, reproducible dependency setup, scheduling and additional source tables.
+Repeated execution replaces raw data rather than appending duplicate rows. Failures before commit roll back changes in the ingestion transaction.
+
+Temporary tables require additional PostgreSQL storage. Streaming has been exercised with the current dataset, but has not been benchmarked on files of tens of gigabytes.
+
+## Data Quality and Business Rules
+
+Configured tests cover:
+
+- Non-null and unique identifiers
+- Relationships between orders and customers
+- Fact-to-dimension customer relationships
+- Order row counts across layers
+- Delivered orders missing their actual delivery timestamp
+
+Late delivery is evaluated only for orders marked `delivered` with both actual and estimated delivery timestamps available.
+
+The comparison uses calendar dates. Delivery on the estimated date is considered on time. Orders that cannot be evaluated retain NULL.
+
+With the current source files:
+
+- Raw orders: **99,441**
+- Raw customer records: **99,441**
+- Distinct customers: **96,096**
+- Delivered orders missing an actual delivery timestamp: **8**
+
+The eight missing timestamps produce a warning rather than an error.
+
+## Validation Performed
+
+- Repeated ingestion preserved expected row counts.
+- The selected dbt models and tests completed with the known delivery-date warning.
+- A controlled failure after raw-table truncation was exercised; both raw tables retained their previous row counts after rollback.
+
+The rollback exercise checked row counts, not a full comparison of every value.
+
+## Current Limitations
+
+- Source acquisition and pipeline invocation are not scheduled.
+- The pipeline currently processes only orders and customers.
+- Upload size checks are not content-checksum comparisons.
+- Raw row counts are compared with temporary tables, not an independent source manifest.
+- Raw ingestion and dbt execution do not share one transaction. If dbt fails after ingestion commits, refreshed raw data remains.
+- Full refresh loading is used; incremental ingestion is not implemented.
+
+## Data Attribution
+
+This is an independent educational project using the Olist public dataset. It is not affiliated with or endorsed by Olist.
