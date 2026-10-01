@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: dim_customers
+    columns:
+      - name: customer_unique_id
+        data_tests:
+          - not_null
+          - unique
+
+      - name: order_count
+        data_tests:
+          - not_null
