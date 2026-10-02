@@ -239,6 +239,19 @@ The eight missing timestamps produce a warning rather than an error.
 
 The rollback exercise checked row counts, not a full comparison of every value.
 
+### Reproducibility Check
+
+The project was tested from a separate Git clone with a newly created Python virtual environment installed from `requirements.txt`.
+
+Raw tables were initialized in a separate PostgreSQL database, `olist_repro_test`, using the repository’s initialization SQL. Python and dbt were configured to use this database, and the pipeline produced:
+
+- **99,441 orders** in `fct_orders`
+- **96,096 customers** in `dim_customers`
+
+The test reused the existing local PostgreSQL server, MinIO service, and uploaded source files. It therefore validates rebuilding the pipeline in a separate environment and database on the same machine, rather than a complete setup on a new machine.
+
+A profile-name mismatch discovered during the test was corrected by aligning the dbt project configuration with `profiles.example.yml`.
+
 ## Current Limitations
 
 - Source acquisition and pipeline invocation are not scheduled.
