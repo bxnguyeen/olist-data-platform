@@ -314,6 +314,16 @@ Pipeline completed.
 
 The totals include model builds and tests. The two warnings correspond to the documented delivery-date and category-translation exceptions.
 
+### Reproducibility Check
+
+The expanded five-table pipeline was tested from a separate Git clone with a new Python virtual environment installed from `requirements.txt`.
+
+All five raw tables were initialized using the repository SQL in a separate PostgreSQL database, `olist_repro_test_v2`. Python and dbt were configured to use this database, and the resulting warehouse tables were checked in DBeaver.
+
+The pipeline completed with **47 PASS, 2 WARN, and 0 ERROR**. The warnings correspond to the documented missing delivery dates and category translations.
+
+This check reused the existing PostgreSQL server and MinIO service on the same machine. It verifies rebuilding from a fresh clone and database, but does not establish a complete setup on a new machine.
+
 ### Earlier validation scope
 
 The earlier orders/customers implementation was also exercised through repeated ingestion, a controlled rollback check, and a separate Git clone with a new virtual environment and a separate PostgreSQL database on the same machine.
@@ -324,7 +334,6 @@ Those checks reused the existing PostgreSQL server and MinIO service. They do no
 
 - Source acquisition, upload, and pipeline execution are not scheduled.
 - Full refresh loading is used; incremental ingestion is not implemented.
-- Fresh-clone reproducibility has not been rechecked for the expanded pipeline.
 - Upload size checks do not verify content checksums.
 - Raw row counts are compared with temporary tables, not an independent source manifest.
 - Raw loading and dbt transformations are separate transactions.
