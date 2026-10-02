@@ -11,3 +11,10 @@ models:
       - name: order_count
         data_tests:
           - not_null
+
+  - name: dim_products
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - unique

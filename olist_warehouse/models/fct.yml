@@ -23,3 +23,17 @@ models:
               arguments:
                 to: ref('dim_customers')
                 field: customer_unique_id
+  
+  - name: fct_order_items
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      
+      - name: order_item_id
+        data_tests:
+          - not_null

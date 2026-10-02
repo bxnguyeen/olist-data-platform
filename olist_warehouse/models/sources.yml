@@ -6,3 +6,6 @@ sources:
     tables:
       - name: orders
       - name: customers
+      - name: order_items
+      - name: products
+      - name: product_category_name_translation

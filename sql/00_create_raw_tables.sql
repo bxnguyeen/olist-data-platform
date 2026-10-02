@@ -21,3 +21,30 @@ CREATE TABLE IF NOT EXISTS "01_raw".customers (
     customer_city TEXT,
     customer_state TEXT
 );
+
+CREATE TABLE IF NOT EXISTS "01_raw".order_items (
+    order_id TEXT,
+    order_item_id TEXT,
+    product_id TEXT,
+    seller_id TEXT,
+    shipping_limit_date TEXT,
+    price TEXT,
+    freight_value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "01_raw".products (
+    product_id TEXT,
+    product_category_name TEXT,
+    product_name_lenght TEXT,
+    product_description_lenght TEXT,
+    product_photos_qty TEXT,
+    product_weight_g TEXT,
+    product_length_cm TEXT,
+    product_height_cm TEXT,
+    product_width_cm TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "01_raw".product_category_name_translation (
+    product_category_name TEXT,
+    product_category_name_english TEXT
+);

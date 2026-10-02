@@ -30,11 +30,38 @@ TABLES = {
         "customer_city",
         "customer_state",
     ],
+    "order_items": [
+        "order_id",
+        "order_item_id",
+        "product_id",
+        "seller_id",
+        "shipping_limit_date",
+        "price",
+        "freight_value",
+    ],
+    "products": [
+        "product_id",
+        "product_category_name",
+        "product_name_lenght",
+        "product_description_lenght",
+        "product_photos_qty",
+        "product_weight_g",
+        "product_length_cm",
+        "product_height_cm",
+        "product_width_cm",
+    ],
+    "product_category_name_translation": [
+        "product_category_name",
+        "product_category_name_english",
+    ],
 }
 
 
 def load_staging_table(s3, connection, cursor, table, columns):
-    filename = f"olist_{table}_dataset.csv"
+    if table == "product_category_name_translation":
+        filename = "product_category_name_translation.csv"
+    else:
+        filename = f"olist_{table}_dataset.csv"
     temporary_table = sql.Identifier(f"load_{table}")
     raw_table = sql.Identifier("01_raw", table)
 
@@ -127,8 +154,13 @@ def main():
                         s3, connection, cursor, table, columns
                     )
 
+                raw_tables = sql.SQL(", ").join(
+                    sql.Identifier("01_raw", table)
+                    for table in TABLES
+                )
+
                 cursor.execute(
-                    'TRUNCATE TABLE "01_raw".orders, "01_raw".customers'
+                    sql.SQL("TRUNCATE TABLE {}").format(raw_tables)
                 )
 
                 for table, columns in TABLES.items():

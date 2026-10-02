@@ -24,6 +24,8 @@ def main():
             "--select",
             "+fct_orders",
             "+dim_customers",
+            "+fct_order_items",
+            "+dim_products",
         ],
         cwd=dbt_dir,
         check=True,

@@ -11,6 +11,9 @@ BUCKET = "olist-raw"
 FILES = [
     "olist_orders_dataset.csv",
     "olist_customers_dataset.csv",
+    "olist_order_items_dataset.csv",
+    "olist_products_dataset.csv",
+    "product_category_name_translation.csv",
 ]
 
 
@@ -71,7 +74,7 @@ def main():
             flush=True,
         )
 
-    print("Both files uploaded successfully.", flush=True)
+    print("All files uploaded successfully.", flush=True)
 
 
 if __name__ == "__main__":
